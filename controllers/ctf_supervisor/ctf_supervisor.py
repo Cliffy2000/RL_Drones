@@ -1,10 +1,13 @@
 from controller import Supervisor
 import random
 import math
+import os
 
 
 TEAM_DRONE_COUNT = 5
 MIN_SPAWN_DIST = 2
+MAX_VELOCITY = 1
+ARENA_SIZE = [24, 15, 4]
 
 
 class CTFSupervisor:
@@ -75,18 +78,59 @@ class CTFSupervisor:
             self.spawned_drones.append(self.supervisor.getFromDef(f"DRONE_DEFEND_{i}"))
         
         self.supervisor.simulationResetPhysics()
+        
+    
+    def get_actions(self):
+        """
+        Placeholder for RL algorithm
+        """
+        return {
+            'attack': [[random.uniform(-MAX_VELOCITY, MAX_VELOCITY), 
+                   random.uniform(-MAX_VELOCITY, MAX_VELOCITY), 
+                   random.uniform(-MAX_VELOCITY, MAX_VELOCITY)] 
+                   for _ in range(TEAM_DRONE_COUNT)],
+            'defend': [[random.uniform(-MAX_VELOCITY, MAX_VELOCITY), 
+                    random.uniform(-MAX_VELOCITY, MAX_VELOCITY), 
+                    random.uniform(-MAX_VELOCITY, MAX_VELOCITY)] 
+                    for _ in range(TEAM_DRONE_COUNT)]
+        }
+    
+    def control_drone(self, drone, velocity):
+        if not drone:
+            return
+        
+        vx = max(-MAX_VELOCITY, min(MAX_VELOCITY, velocity[0]))
+        vy = max(-MAX_VELOCITY, min(MAX_VELOCITY, velocity[1]))
+        vz = max(-MAX_VELOCITY, min(MAX_VELOCITY, velocity[2]))
+        
+        vel_field = drone.getVelocity()
+        if vel_field:
+            drone.setVelocity([vx, vy, vz, vel_field[3], vel_field[4], vel_field[5]])  
+    
+    def apply_actions(self, actions):
+        for i in range(TEAM_DRONE_COUNT):
+            drone = self.supervisor.getFromDef(f"DRONE_ATTACK_{i}")
+            if drone:
+                self.control_drone(drone, actions['attack'][i])
+        
+        for i in range(TEAM_DRONE_COUNT):
+            drone = self.supervisor.getFromDef(f"DRONE_DEFEND_{i}")
+            if drone:
+                self.control_drone(drone, actions['defend'][i]) 
     
     
     def cleanup_episode(self):
         [drone.remove() for drone in self.spawned_drones if drone]
         self.spawned_drones.clear()
     
+    
     def run(self):
         self.start_episode()
         
         while self.supervisor.step(self.timestep) != -1:
             # Main control loop
-            pass
+            actions = self.get_actions()
+            self.apply_actions(actions)
 
 
 if __name__ == "__main__":

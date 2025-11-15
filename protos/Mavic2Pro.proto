@@ -106,19 +106,19 @@ Robot {
             ]
           }
         ]
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.12
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.12
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -151,28 +151,28 @@ Robot {
           }
         ]
         name "rear left propeller"
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.013
-                }
-              ]
-            }
-            Pose {
-              translation 0 0 0.023
-              rotation 0 0 1 0.7854
-              children [
-                Box {
-                  size 0.23 0.018 0.005
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.013
+        #         }
+        #       ]
+        #     }
+        #     Pose {
+        #       translation 0 0 0.023
+        #       rotation 0 0 1 0.7854
+        #       children [
+        #         Box {
+        #           size 0.23 0.018 0.005
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -228,19 +228,19 @@ Robot {
             ]
           }
         ]
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.12
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.12
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -273,28 +273,28 @@ Robot {
           }
         ]
         name "rear right propeller"
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.013
-                }
-              ]
-            }
-            Pose {
-              translation 0 0 0.023
-              rotation 0 0 1 -0.7854
-              children [
-                Box {
-                  size 0.23 0.018 0.005
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.013
+        #         }
+        #       ]
+        #     }
+        #     Pose {
+        #       translation 0 0 0.023
+        #       rotation 0 0 1 -0.7854
+        #       children [
+        #         Box {
+        #           size 0.23 0.018 0.005
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -350,19 +350,19 @@ Robot {
             ]
           }
         ]
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.12
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.12
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -395,28 +395,28 @@ Robot {
           }
         ]
         name "front right propeller"
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.013
-                }
-              ]
-            }
-            Pose {
-              translation 0 0 0.023
-              rotation 0 0 1 0.7854
-              children [
-                Box {
-                  size 0.23 0.018 0.005
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.013
+        #         }
+        #       ]
+        #     }
+        #     Pose {
+        #       translation 0 0 0.023
+        #       rotation 0 0 1 0.7854
+        #       children [
+        #         Box {
+        #           size 0.23 0.018 0.005
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -472,19 +472,19 @@ Robot {
             ]
           }
         ]
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.12
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.12
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -517,28 +517,28 @@ Robot {
           }
         ]
         name "front left propeller"
-        boundingObject Group {
-          children [
-            Pose {
-              translation 0 0 0.015
-              children [
-                Cylinder {
-                  height 0.025
-                  radius 0.013
-                }
-              ]
-            }
-            Pose {
-              translation 0 0 0.023
-              rotation 0 0 1 -0.7854
-              children [
-                Box {
-                  size 0.23 0.018 0.005
-                }
-              ]
-            }
-          ]
-        }
+        # boundingObject Group {
+        #   children [
+        #     Pose {
+        #       translation 0 0 0.015
+        #       children [
+        #         Cylinder {
+        #           height 0.025
+        #           radius 0.013
+        #         }
+        #       ]
+        #     }
+        #     Pose {
+        #       translation 0 0 0.023
+        #       rotation 0 0 1 -0.7854
+        #       children [
+        #         Box {
+        #           size 0.23 0.018 0.005
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
         # physics Physics {
         #   density -1
         #   mass 0.1
@@ -622,13 +622,13 @@ Robot {
       }
     ]
   }
-  # physics Physics {
-    # density -1
-    # mass 0.4
-    # centerOfMass [
-    #   -0.088 0 -0.04
-    # ]
-  # }
+  physics Physics {
+    density -1
+    mass 0.4
+    centerOfMass [
+      -0.088 0 -0.04
+    ]
+  }
   controller IS controller
 }
 }
