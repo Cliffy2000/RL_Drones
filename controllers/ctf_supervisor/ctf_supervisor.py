@@ -41,12 +41,12 @@ class CTFSupervisor:
         # Game state tracking
         self.flag_captured = False
         self.episode_time = 0
-        self.max_episode_time = 25000  # 5 minutes in ms
+        self.max_episode_time = 120000  # 5 minutes in ms
         self.prev_attack_distances = []
         self.active_attack_drones = set()
         self.active_defend_drones = set()
         self.collision_threshold = 0.5  # Distance threshold for collision detection
-        self.flag_position = np.array([0, 0, 2])  # Flag on right side
+        self.flag_position = np.array([5, 0, 0])  # Flag on right side 
         
         # RL configuration
         self.use_rl = use_rl and RL_AVAILABLE
@@ -367,9 +367,6 @@ class CTFSupervisor:
         blue_reward = 0
         red_reward = 0
         
-        # Get flag position (assumed to be on the right side at x=11.5)
-        flag_position = [11.5, 0, 0]
-        
         # Update episode time
         self.episode_time += self.timestep
         
@@ -392,9 +389,9 @@ class CTFSupervisor:
                 position = drone.getPosition()
                 if position:
                     distance = math.sqrt(
-                        (position[0] - flag_position[0])**2 + 
-                        (position[1] - flag_position[1])**2 + 
-                        (position[2] - flag_position[2])**2
+                        (position[0] - self.flag_position[0])**2 + 
+                        (position[1] - self.flag_position[1])**2 + 
+                        (position[2] - self.flag_position[2])**2
                     )
                     current_attack_distances.append(distance)
                     
@@ -403,7 +400,8 @@ class CTFSupervisor:
                         closest_drone_id = i
                     
                     # Check for flag capture (within 1 meter of flag)
-                    if distance < 1.0 and not self.flag_captured:
+                    if distance < 5.0 and not self.flag_captured:
+                        print(f"Flag captured by drone {i} at distance {distance:.2f}!")
                         self.flag_captured = True
                         red_reward += 250
                         blue_reward -= 250
@@ -470,13 +468,16 @@ class CTFSupervisor:
                 
                 if distance < self.collision_threshold:
                     # Collision detected
-                    red_reward -= 50
+                    red_reward -= 100
                     collisions_this_step += 1
                     
                     # Remove the attacking drone
                     if attack_idx in self.active_attack_drones:
                         self.active_attack_drones.remove(attack_idx)
+                        self.supervisor.getFromDef(f"DRONE_ATTACK_{attack_idx}").remove()
+                        self.spawned_drones[attack_idx] = None
                         blue_reward += 50  # Blue team gets reward for eliminating red drone
+                        print(f"Collision detected: Attack drone {attack_idx} eliminated by Defend drone {defend_idx}")
                         # Log event
                         with open(self.event_log_file, 'a') as f:
                             f.write(f"{self.episode_count},{self.total_steps},collision,attack_{attack_idx}_vs_defend_{defend_idx}\n")

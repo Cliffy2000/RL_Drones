@@ -5,6 +5,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
 IMPORTABLE EXTERNPROTO "../protos/Mavic2Pro.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/samples/contests/tower_of_hanoi/protos/YoubotFlag.proto"
 
 WorldInfo {
   gravity 0
@@ -78,6 +79,9 @@ Solid {
   boundingObject Box {
     size 1 1 4
   }
+}
+YoubotFlag {
+  translation 5 0 0
 }
 DEF DRONE_ATTACK_0 Mavic2Pro {
   hidden linearVelocity_0 -1 0.7424689531326294 -0.4680377244949341
