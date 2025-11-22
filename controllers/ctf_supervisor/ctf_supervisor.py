@@ -46,7 +46,7 @@ class CTFSupervisor:
         self.active_attack_drones = set()
         self.active_defend_drones = set()
         self.collision_threshold = 0.5  # Distance threshold for collision detection
-        self.flag_position = np.array([5, 0, 0])  # Flag on right side
+        self.flag_position = np.array([5, 0, 0])  # Flag on right side 
         
         # RL configuration
         self.use_rl = use_rl and RL_AVAILABLE
@@ -367,9 +367,6 @@ class CTFSupervisor:
         blue_reward = 0
         red_reward = 0
         
-        # Get flag position (assumed to be on the right side at x=11.5)
-        flag_position = [11.5, 0, 0]
-        
         # Update episode time
         self.episode_time += self.timestep
         
@@ -392,9 +389,9 @@ class CTFSupervisor:
                 position = drone.getPosition()
                 if position:
                     distance = math.sqrt(
-                        (position[0] - flag_position[0])**2 + 
-                        (position[1] - flag_position[1])**2 + 
-                        (position[2] - flag_position[2])**2
+                        (position[0] - self.flag_position[0])**2 + 
+                        (position[1] - self.flag_position[1])**2 + 
+                        (position[2] - self.flag_position[2])**2
                     )
                     current_attack_distances.append(distance)
                     
@@ -471,13 +468,14 @@ class CTFSupervisor:
                 
                 if distance < self.collision_threshold:
                     # Collision detected
-                    red_reward -= 50
+                    red_reward -= 100
                     collisions_this_step += 1
                     
                     # Remove the attacking drone
                     if attack_idx in self.active_attack_drones:
                         self.active_attack_drones.remove(attack_idx)
                         self.supervisor.getFromDef(f"DRONE_ATTACK_{attack_idx}").remove()
+                        self.spawned_drones[attack_idx] = None
                         blue_reward += 50  # Blue team gets reward for eliminating red drone
                         print(f"Collision detected: Attack drone {attack_idx} eliminated by Defend drone {defend_idx}")
                         # Log event
