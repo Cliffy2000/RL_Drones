@@ -259,7 +259,8 @@ class PPOAgent:
             gae = delta + self.gamma * self.gae_lambda * (1 - dones[step]) * gae
             advantages.insert(0, gae)
         
-        advantages = torch.FloatTensor(advantages).to(self.device)
+        # advantages = torch.FloatTensor(advantages).to(self.device)
+        advantages = torch.FloatTensor(advantages).unsqueeze(-1).to(self.device)
         returns = advantages + values
         
         return advantages, returns
