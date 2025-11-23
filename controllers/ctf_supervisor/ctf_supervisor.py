@@ -106,6 +106,10 @@ class CTFSupervisor:
         self.episode_attack_rewards = []
         self.episode_defend_rewards = []
         
+        # Individual drone distance tracking for reward calculation
+        self.prev_red_distances_to_flag = {}  # {drone_id: distance}
+        self.prev_blue_distances_to_target = {}  # {drone_id: distance}
+        
         # Setup logging
         log_dir = Path(__file__).parent.parent.parent / "logs"
         log_dir.mkdir(exist_ok=True)
@@ -152,6 +156,8 @@ class CTFSupervisor:
         self.prev_attack_distances = []
         self.active_attack_drones = set(range(TEAM_DRONE_COUNT))
         self.active_defend_drones = set(range(TEAM_DRONE_COUNT))
+        self.prev_red_distances_to_flag.clear()
+        self.prev_blue_distances_to_target.clear()
         
         root = self.supervisor.getRoot()
         children_field = root.getField("children")
@@ -353,140 +359,197 @@ class CTFSupervisor:
     
     def calculate_rewards(self):
         """
-        1. For Attacking Team:
-        - Large positive reward for flag capture : 250
-        - A small reward for making progress towards the flag : 5
-        - A negative reward for collisions with opposing team: (-50)
-        - A small negative reward for each time step to encourage quicker game progression and strategy shaping. (-1)
+        Individual reward calculation for each drone based on their behavior.
         
-        2. For Blue Team:
-        - A large positive reward when time runs out and flag hasn't been captured :250
-        - A small reward for each time step that passes without capture of the flag : 5
-        - A small reward when a red team drone is eliminated : 50
+        RED TEAM (Attack):
+        - Dense distance-based progress rewards toward flag
+        - Danger zone penalty when near blue drones
+        - Timestep penalty to encourage speed
+        - Large reward for flag capture
+        
+        BLUE TEAM (Defend):
+        - Threat-weighted pursuit rewards (target red drones closest to flag)
+        - Proximity bonuses for being near high-threat targets
+        - Elimination rewards
+        - Terminal rewards for timeout win/loss
+        
+        Returns:
+            (red_rewards_list, blue_rewards_list): Individual rewards for each drone
         """
-        blue_reward = 0
-        red_reward = 0
+        # Initialize individual reward arrays
+        red_rewards = [0.0] * TEAM_DRONE_COUNT
+        blue_rewards = [0.0] * TEAM_DRONE_COUNT
         
-        # Get flag position (assumed to be on the right side at x=11.5)
-        flag_position = [11.5, 0, 0]
+        # Constants
+        MAX_DIST = 25.0  # Approximate max distance in arena
+        DANGER_ZONE_DIST = 2.0
+        INTERCEPTION_ZONE_DIST = 3.0
+        FLAG_CAPTURE_DIST = 1.0
         
         # Update episode time
         self.episode_time += self.timestep
-        
-        # Check for timeout
         time_expired = self.episode_time >= self.max_episode_time
         
-        # === RED TEAM (ATTACKING) REWARDS ===
+        # === COLLECT DRONE POSITIONS ===
+        red_positions = {}  # {drone_id: np.array([x, y, z])}
+        blue_positions = {}
         
-        # Base penalty for each time step (-1)
-        red_reward -= 1
+        for i in range(TEAM_DRONE_COUNT):
+            red_drone = self.supervisor.getFromDef(f"DRONE_ATTACK_{i}")
+            if red_drone and i in self.active_attack_drones:
+                pos = red_drone.getPosition()
+                if pos:
+                    red_positions[i] = np.array(pos)
+            
+            blue_drone = self.supervisor.getFromDef(f"DRONE_DEFEND_{i}")
+            if blue_drone and i in self.active_defend_drones:
+                pos = blue_drone.getPosition()
+                if pos:
+                    blue_positions[i] = np.array(pos)
         
-        # Calculate distances to flag and check for progress
-        current_attack_distances = []
+        # === RED TEAM REWARDS ===
         min_distance_to_flag = float('inf')
-        closest_drone_id = None
+        closest_red_drone_id = None
         
-        for i in self.active_attack_drones:
-            drone = self.supervisor.getFromDef(f"DRONE_ATTACK_{i}")
-            if drone:
-                position = drone.getPosition()
-                if position:
-                    distance = math.sqrt(
-                        (position[0] - flag_position[0])**2 + 
-                        (position[1] - flag_position[1])**2 + 
-                        (position[2] - flag_position[2])**2
-                    )
-                    current_attack_distances.append(distance)
+        for red_id, red_pos in red_positions.items():
+            # Base timestep penalty
+            red_rewards[red_id] -= 0.2
+            
+            # Calculate distance to flag
+            dist_to_flag = np.linalg.norm(red_pos - self.flag_position)
+            
+            if dist_to_flag < min_distance_to_flag:
+                min_distance_to_flag = dist_to_flag
+                closest_red_drone_id = red_id
+            
+            # Dense progress reward (distance-based shaping)
+            if red_id in self.prev_red_distances_to_flag:
+                prev_dist = self.prev_red_distances_to_flag[red_id]
+                progress = prev_dist - dist_to_flag
+                red_rewards[red_id] += progress * 2.0
+            
+            self.prev_red_distances_to_flag[red_id] = dist_to_flag
+            
+            # Danger zone penalty (when near blue drones)
+            for blue_pos in blue_positions.values():
+                dist_to_enemy = np.linalg.norm(red_pos - blue_pos)
+                if dist_to_enemy < DANGER_ZONE_DIST:
+                    red_rewards[red_id] -= 1.0
+            
+            # Check for flag capture
+            if dist_to_flag < FLAG_CAPTURE_DIST and not self.flag_captured:
+                self.flag_captured = True
+                red_rewards[red_id] += 300  # Capturer gets large reward
+                
+                # Team bonus for other red drones
+                for other_red_id in red_positions.keys():
+                    if other_red_id != red_id:
+                        red_rewards[other_red_id] += 50
+                
+                # Penalty for all blue drones
+                for blue_id in blue_positions.keys():
+                    blue_rewards[blue_id] -= 80
+                
+                # Log event
+                with open(self.event_log_file, 'a') as f:
+                    f.write(f"{self.episode_count},{self.total_steps},flag_captured,drone_{red_id}_dist_{dist_to_flag:.2f}\n")
+        
+        # === BLUE TEAM REWARDS ===
+        
+        # Find highest-threat red drone (closest to flag) for each blue drone to target
+        red_threats = []  # [(red_id, dist_to_flag, position)]
+        for red_id, red_pos in red_positions.items():
+            dist_to_flag = np.linalg.norm(red_pos - self.flag_position)
+            red_threats.append((red_id, dist_to_flag, red_pos))
+        
+        red_threats.sort(key=lambda x: x[1])  # Sort by distance to flag (closest first)
+        
+        for blue_id, blue_pos in blue_positions.items():
+            # Each blue drone targets the red drone closest to the flag
+            if red_threats:
+                target_red_id, target_dist_to_flag, target_pos = red_threats[0]
+                
+                # Calculate threat weight (closer to flag = higher threat)
+                threat_weight = 1.0 + (MAX_DIST - target_dist_to_flag) / MAX_DIST
+                threat_weight = min(threat_weight, 2.0)  # Cap at 2.0
+                
+                # Distance to target
+                dist_to_target = np.linalg.norm(blue_pos - target_pos)
+                
+                # Pursuit reward (moving toward high-threat target)
+                if blue_id in self.prev_blue_distances_to_target:
+                    prev_dist = self.prev_blue_distances_to_target[blue_id]
+                    pursuit_progress = prev_dist - dist_to_target
+                    blue_rewards[blue_id] += pursuit_progress * threat_weight
+                
+                self.prev_blue_distances_to_target[blue_id] = dist_to_target
+                
+                # Proximity bonus (being close to high-threat targets)
+                if dist_to_target < INTERCEPTION_ZONE_DIST and threat_weight > 1.5:
+                    blue_rewards[blue_id] += 1.0
+        
+        # === COLLISION DETECTION & ELIMINATION REWARDS ===
+        collisions_this_step = 0
+        eliminated_red_drones = []
+        
+        for red_id, red_pos in list(red_positions.items()):
+            for blue_id, blue_pos in blue_positions.items():
+                dist = np.linalg.norm(red_pos - blue_pos)
+                
+                if dist < self.collision_threshold:
+                    collisions_this_step += 1
                     
-                    if distance < min_distance_to_flag:
-                        min_distance_to_flag = distance
-                        closest_drone_id = i
+                    # Penalty for red drone
+                    red_rewards[red_id] -= 50
                     
-                    # Check for flag capture (within 1 meter of flag)
-                    if distance < 1.0 and not self.flag_captured:
-                        self.flag_captured = True
-                        red_reward += 250
-                        blue_reward -= 250
-                        # Log event
-                        with open(self.event_log_file, 'a') as f:
-                            f.write(f"{self.episode_count},{self.total_steps},flag_captured,drone_{i}_dist_{distance:.2f}\n")
+                    # Reward for blue drone that caused elimination
+                    blue_rewards[blue_id] += 60
+                    
+                    # Remove red drone
+                    if red_id in self.active_attack_drones:
+                        self.active_attack_drones.remove(red_id)
+                        eliminated_red_drones.append(red_id)
+                    
+                    # Log event
+                    with open(self.event_log_file, 'a') as f:
+                        f.write(f"{self.episode_count},{self.total_steps},collision,attack_{red_id}_vs_defend_{blue_id}\n")
+                    
+                    break  # Only count one collision per red drone
         
-        # Track distance metrics
-        avg_distance = sum(current_attack_distances) / len(current_attack_distances) if current_attack_distances else 0
+        # === TERMINAL REWARDS ===
         
-        # Reward for making progress towards the flag (+5)
-        progress_made = False
-        if self.prev_attack_distances and current_attack_distances:
-            avg_prev_dist = sum(self.prev_attack_distances) / len(self.prev_attack_distances)
-            avg_curr_dist = sum(current_attack_distances) / len(current_attack_distances)
-            if avg_curr_dist < avg_prev_dist:
-                red_reward += 5
-                progress_made = True
-        
-        self.prev_attack_distances = current_attack_distances
-        
-        # === BLUE TEAM (DEFENDING) REWARDS ===
-        
-        # Small reward for each time step without flag capture (+5)
-        if not self.flag_captured:
-            blue_reward += 5
-        
-        # Large reward if time expired and flag not captured (+250)
+        # Timeout win for blue team
         if time_expired and not self.flag_captured:
-            blue_reward += 250
+            for blue_id in blue_positions.keys():
+                blue_rewards[blue_id] += 80
+            
             # Log event
             with open(self.event_log_file, 'a') as f:
                 f.write(f"{self.episode_count},{self.total_steps},time_expired,defenders_win\n")
         
-        # === COLLISION DETECTION ===
+        # === LOGGING ===
         
-        # Check for collisions between red and blue drones
-        attack_positions = []
-        defend_positions = []
+        # Calculate average distance for logging
+        avg_distance = np.mean([np.linalg.norm(pos - self.flag_position) for pos in red_positions.values()]) if red_positions else 0
         
-        for i in self.active_attack_drones:
-            drone = self.supervisor.getFromDef(f"DRONE_ATTACK_{i}")
-            if drone:
-                pos = drone.getPosition()
-                if pos:
-                    attack_positions.append((i, pos))
+        # Track progress (for logging)
+        progress_made = False
+        if self.prev_attack_distances:
+            avg_prev = np.mean(self.prev_attack_distances)
+            avg_curr = np.mean([np.linalg.norm(pos - self.flag_position) for pos in red_positions.values()]) if red_positions else 0
+            progress_made = avg_curr < avg_prev
         
-        for i in self.active_defend_drones:
-            drone = self.supervisor.getFromDef(f"DRONE_DEFEND_{i}")
-            if drone:
-                pos = drone.getPosition()
-                if pos:
-                    defend_positions.append((i, pos))
-        
-        collisions_this_step = 0
-        # Check all pairs for collisions
-        for attack_idx, attack_pos in attack_positions:
-            for defend_idx, defend_pos in defend_positions:
-                distance = math.sqrt(
-                    (attack_pos[0] - defend_pos[0])**2 + 
-                    (attack_pos[1] - defend_pos[1])**2 + 
-                    (attack_pos[2] - defend_pos[2])**2
-                )
-                
-                if distance < self.collision_threshold:
-                    # Collision detected
-                    red_reward -= 50
-                    collisions_this_step += 1
-                    
-                    # Remove the attacking drone
-                    if attack_idx in self.active_attack_drones:
-                        self.active_attack_drones.remove(attack_idx)
-                        blue_reward += 50  # Blue team gets reward for eliminating red drone
-                        # Log event
-                        with open(self.event_log_file, 'a') as f:
-                            f.write(f"{self.episode_count},{self.total_steps},collision,attack_{attack_idx}_vs_defend_{defend_idx}\n")
+        self.prev_attack_distances = [np.linalg.norm(pos - self.flag_position) for pos in red_positions.values()]
         
         # Log step metrics to CSV every 50 steps
         if self.total_steps % 50 == 0:
+            avg_red = np.mean([r for r in red_rewards if r != 0]) if any(r != 0 for r in red_rewards) else 0
+            avg_blue = np.mean([r for r in blue_rewards if r != 0]) if any(r != 0 for r in blue_rewards) else 0
+            
             with open(self.step_log_file, 'a') as f:
-                f.write(f"{self.episode_count},{self.total_steps},{min_distance_to_flag:.2f},{avg_distance:.2f},{len(self.active_attack_drones)},{len(self.active_defend_drones)},{red_reward:.2f},{blue_reward:.2f},{1 if progress_made else 0},{collisions_this_step}\n")
+                f.write(f"{self.episode_count},{self.total_steps},{min_distance_to_flag:.2f},{avg_distance:.2f},{len(self.active_attack_drones)},{len(self.active_defend_drones)},{avg_red:.2f},{avg_blue:.2f},{1 if progress_made else 0},{collisions_this_step}\n")
         
-        return blue_reward, red_reward 
+        return red_rewards, blue_rewards 
     
     
     def cleanup_episode(self):
@@ -543,8 +606,8 @@ class CTFSupervisor:
             # Apply actions
             self.apply_actions(action_data)
             
-            # Calculate rewards
-            blue_reward, red_reward = self.calculate_rewards()
+            # Calculate rewards (returns individual rewards for each drone)
+            red_rewards, blue_rewards = self.calculate_rewards()
             
             # Store transitions if in training mode
             if self.training_mode and self.use_rl:
@@ -560,7 +623,7 @@ class CTFSupervisor:
                         if log_prob is not None:
                             self.attack_agent.store_transition(
                                 i, attack_states[i], attack_actions[i],
-                                red_reward, value, log_prob, done
+                                red_rewards[i], value, log_prob, done
                             )
                 
                 if 'defend_aux' in action_data:
@@ -572,14 +635,14 @@ class CTFSupervisor:
                         if log_prob is not None:
                             self.defend_agent.store_transition(
                                 i, defend_states[i], defend_actions[i],
-                                blue_reward, value, log_prob, done
+                                blue_rewards[i], value, log_prob, done
                             )
             
             # Update counters
             self.total_steps += 1
             episode_steps += 1
-            episode_attack_reward += red_reward
-            episode_defend_reward += blue_reward
+            episode_attack_reward += sum(red_rewards)
+            episode_defend_reward += sum(blue_rewards)
             
             # Update RL agents periodically
             if self.training_mode and self.use_rl and self.total_steps % self.update_frequency == 0:
