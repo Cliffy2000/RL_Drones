@@ -38,7 +38,7 @@ Solid {
 TexturedBackground {
 }
 RectangleArena {
-  floorSize 24 15
+  floorSize 10 6
   floorTileSize 1 1
   floorAppearance Parquetry {
     type "light strip"
@@ -81,7 +81,6 @@ Solid {
   }
 }
 YoubotFlag {
-  translation 5 0 0
 }
 DEF DRONE_ATTACK_0 Mavic2Pro {
   hidden linearVelocity_0 -1 0.7424689531326294 -0.4680377244949341

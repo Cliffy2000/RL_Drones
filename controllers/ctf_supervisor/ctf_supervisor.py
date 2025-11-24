@@ -15,9 +15,9 @@ except ImportError:
 
 
 TEAM_DRONE_COUNT = 5
-MIN_SPAWN_DIST = 2
+MIN_SPAWN_DIST = 0
 MAX_VELOCITY = 1
-ARENA_SIZE = [24, 15, 4]
+ARENA_SIZE = [5, 5, 4]
 
 
 class CTFSupervisor:
@@ -41,12 +41,12 @@ class CTFSupervisor:
         # Game state tracking
         self.flag_captured = False
         self.episode_time = 0
-        self.max_episode_time = 25000  # 5 minutes in ms
+        self.max_episode_time = 300000  # 5 minutes in ms
         self.prev_attack_distances = []
         self.active_attack_drones = set()
         self.active_defend_drones = set()
         self.collision_threshold = 0.5  # Distance threshold for collision detection
-        self.flag_position = np.array([0, 0, 2])  # Flag on right side
+        self.flag_position = np.array([0, 0, 0])  # Flag on right side
         
         # RL configuration
         self.use_rl = use_rl and RL_AVAILABLE
@@ -167,7 +167,7 @@ class CTFSupervisor:
             attempts = 0
             while len(positions) < count and attempts < 1000:
                 x = random.uniform(x_range[0], x_range[1])
-                y = random.uniform(-7, 7)  # Within arena bounds (-7.5 to 7.5)
+                y = random.uniform(-2, 2)  # Within arena bounds (-7.5 to 7.5)
                 z = random.uniform(1, 3)  # 1 to 3 height
                 
                 # Check minimum distance from existing positions
@@ -185,10 +185,10 @@ class CTFSupervisor:
             return positions
         
         # Attack team spawns on left side (x: -12 to -8)
-        attack_positions = get_valid_positions([-11.5, -8], TEAM_DRONE_COUNT)
+        attack_positions = get_valid_positions([-4, -3], TEAM_DRONE_COUNT)
         
         # Defend team spawns on right side (x: 8 to 12)
-        defend_positions = get_valid_positions([8, 11.5], TEAM_DRONE_COUNT)
+        defend_positions = get_valid_positions([3, 4], TEAM_DRONE_COUNT)
         
         # Spawn attack team (red)
         for i in range(TEAM_DRONE_COUNT):
@@ -343,7 +343,7 @@ class CTFSupervisor:
         
         vel_field = drone.getVelocity()
         if vel_field:
-            drone.setVelocity([vx, vy, vz, vel_field[3], vel_field[4], vel_field[5]])  
+            drone.setVelocity([vx, vy, vz, 0, 0, 0])  
     
     def apply_actions(self, actions):
         for i in range(TEAM_DRONE_COUNT):
