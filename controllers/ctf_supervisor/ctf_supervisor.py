@@ -36,7 +36,6 @@ class CTFSupervisor:
         """
         self.supervisor = Supervisor()
         self.timestep = int(self.supervisor.getBasicTimeStep())
-        self.spawned_drones = []
         
         # Game state tracking
         self.flag_captured = False
@@ -201,14 +200,12 @@ class CTFSupervisor:
             pos = attack_positions[i]
             drone_str = f'DEF DRONE_ATTACK_{i} Mavic2Pro {{ translation {pos[0]} {pos[1]} {pos[2]} bodyColor 1 0 0 }}'
             children_field.importMFNodeFromString(-1, drone_str)
-            self.spawned_drones.append(self.supervisor.getFromDef(f"DRONE_ATTACK_{i}"))
         
         # Spawn defend team (blue)
         for i in range(TEAM_DRONE_COUNT):
             pos = defend_positions[i]
             drone_str = f'DEF DRONE_DEFEND_{i} Mavic2Pro {{ translation {pos[0]} {pos[1]} {pos[2]} bodyColor 0 0 1 }}'
             children_field.importMFNodeFromString(-1, drone_str)
-            self.spawned_drones.append(self.supervisor.getFromDef(f"DRONE_DEFEND_{i}"))
 
         self.supervisor.simulationResetPhysics()
         
@@ -568,8 +565,18 @@ class CTFSupervisor:
     
     
     def cleanup_episode(self):
-        [drone.remove() for drone in self.spawned_drones if drone]
-        self.spawned_drones.clear()
+        for drone_id in self.active_attack_drones:
+            drone = self.supervisor.getFromDef(f"DRONE_ATTACK_{drone_id}")
+            if drone:
+                drone.remove()
+
+        for drone_id in self.active_defend_drones:
+            drone = self.supervisor.getFromDef(f"DRONE_DEFEND_{drone_id}")
+            if drone:
+                drone.remove()
+
+        self.active_attack_drones.clear()
+        self.active_defend_drones.clear()
     
     
     def save_checkpoint(self, episode=None):
