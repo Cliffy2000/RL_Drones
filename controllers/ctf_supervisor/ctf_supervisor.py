@@ -509,7 +509,12 @@ class CTFSupervisor:
                     if red_id in self.active_attack_drones:
                         self.active_attack_drones.remove(red_id)
                         eliminated_red_drones.append(red_id)
-                    
+                        # This is important to ensure the drone is removed from simulation
+                        drone_node = self.supervisor.getFromDef(f"DRONE_ATTACK_{red_id}")
+                        if drone_node:
+                            drone_node.remove()
+                            print(f"Physically removed drone DRONE_ATTACK_{red_id} from simulation")
+     
                     # Log event
                     with open(self.event_log_file, 'a') as f:
                         f.write(f"{self.episode_count},{self.total_steps},collision,attack_{red_id}_vs_defend_{blue_id}\n")
