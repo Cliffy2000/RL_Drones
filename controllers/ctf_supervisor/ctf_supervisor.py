@@ -36,7 +36,6 @@ class CTFSupervisor:
         """
         self.supervisor = Supervisor()
         self.timestep = int(self.supervisor.getBasicTimeStep())
-        self.spawned_drones = []
         
         # Game state tracking
         self.flag_captured = False
@@ -190,20 +189,24 @@ class CTFSupervisor:
         # Defend team spawns on right side (x: 8 to 12)
         defend_positions = get_valid_positions([3, 4], TEAM_DRONE_COUNT)
         
+        self.flag_position = get_valid_positions([0, 4], 1)[0]
+        flag = self.supervisor.getFromDef("FLAG")
+        if flag:
+            flag.getField("translation").setSFVec3f(self.flag_position)
+        else:
+            print("Couldn't set flag!")
         # Spawn attack team (red)
         for i in range(TEAM_DRONE_COUNT):
             pos = attack_positions[i]
             drone_str = f'DEF DRONE_ATTACK_{i} Mavic2Pro {{ translation {pos[0]} {pos[1]} {pos[2]} bodyColor 1 0 0 }}'
             children_field.importMFNodeFromString(-1, drone_str)
-            self.spawned_drones.append(self.supervisor.getFromDef(f"DRONE_ATTACK_{i}"))
         
         # Spawn defend team (blue)
         for i in range(TEAM_DRONE_COUNT):
             pos = defend_positions[i]
             drone_str = f'DEF DRONE_DEFEND_{i} Mavic2Pro {{ translation {pos[0]} {pos[1]} {pos[2]} bodyColor 0 0 1 }}'
             children_field.importMFNodeFromString(-1, drone_str)
-            self.spawned_drones.append(self.supervisor.getFromDef(f"DRONE_DEFEND_{i}"))
-        
+
         self.supervisor.simulationResetPhysics()
         
     
@@ -336,14 +339,18 @@ class CTFSupervisor:
     def control_drone(self, drone, velocity):
         if not drone:
             return
-        
-        vx = max(-MAX_VELOCITY, min(MAX_VELOCITY, velocity[0]))
-        vy = max(-MAX_VELOCITY, min(MAX_VELOCITY, velocity[1]))
-        vz = max(-MAX_VELOCITY, min(MAX_VELOCITY, velocity[2]))
+
+        orientation = drone.getOrientation()
+        up_vector = [orientation[1], orientation[4], orientation[7]]  # [R01, R11, R21]
+        # Desired up vector
+        desired_up = [0, 1, 0]
+
+        velocity = np.maximum(np.minimum(velocity, MAX_VELOCITY), -MAX_VELOCITY)
+        torque = np.cross(up_vector, desired_up) * 5.0 
         
         vel_field = drone.getVelocity()
         if vel_field:
-            drone.setVelocity([vx, vy, vz, 0, 0, 0])  
+            drone.setVelocity([velocity[0], velocity[1], velocity[2], torque[0], torque[1], torque[2]])  
     
     def apply_actions(self, actions):
         for i in range(TEAM_DRONE_COUNT):
@@ -509,7 +516,12 @@ class CTFSupervisor:
                     if red_id in self.active_attack_drones:
                         self.active_attack_drones.remove(red_id)
                         eliminated_red_drones.append(red_id)
-                    
+                        # This is important to ensure the drone is removed from simulation
+                        drone_node = self.supervisor.getFromDef(f"DRONE_ATTACK_{red_id}")
+                        if drone_node:
+                            drone_node.remove()
+                            print(f"Physically removed drone DRONE_ATTACK_{red_id} from simulation")
+     
                     # Log event
                     with open(self.event_log_file, 'a') as f:
                         f.write(f"{self.episode_count},{self.total_steps},collision,attack_{red_id}_vs_defend_{blue_id}\n")
@@ -553,8 +565,18 @@ class CTFSupervisor:
     
     
     def cleanup_episode(self):
-        [drone.remove() for drone in self.spawned_drones if drone]
-        self.spawned_drones.clear()
+        for drone_id in self.active_attack_drones:
+            drone = self.supervisor.getFromDef(f"DRONE_ATTACK_{drone_id}")
+            if drone:
+                drone.remove()
+
+        for drone_id in self.active_defend_drones:
+            drone = self.supervisor.getFromDef(f"DRONE_DEFEND_{drone_id}")
+            if drone:
+                drone.remove()
+
+        self.active_attack_drones.clear()
+        self.active_defend_drones.clear()
     
     
     def save_checkpoint(self, episode=None):
