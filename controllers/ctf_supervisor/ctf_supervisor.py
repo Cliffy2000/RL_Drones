@@ -40,7 +40,7 @@ class CTFSupervisor:
         # Game state tracking
         self.flag_captured = False
         self.episode_time = 0
-        self.max_episode_time = 300000  # 5 minutes in ms
+        self.max_episode_time = 60000  # 1 minute in ms (reduced from 5 minutes)
         self.prev_attack_distances = []
         self.active_attack_drones = set()
         self.active_defend_drones = set()
@@ -95,7 +95,7 @@ class CTFSupervisor:
         # Training statistics
         self.episode_count = 0
         self.total_steps = 0
-        self.update_frequency = 2048  # Update agents every N steps
+        self.update_frequency = 500  # Update agents every N steps
         
         # Comprehensive tracking
         self.attack_wins = 0
@@ -234,10 +234,16 @@ class CTFSupervisor:
         if position is None:
             position = [0, 0, 0]
         
-        # Calculate distance to flag
-        flag_dist = np.linalg.norm(np.array(position) - self.flag_position)
+        # Calculate distance to flag (normalized) - 2D only
+        flag_dist = np.linalg.norm(np.array(position[:2]) - self.flag_position[:2])
+        flag_dist_norm = flag_dist / 10.0  # Normalize by approximate max distance
         
-        # Get team positions
+        # Normalize positions and flag relative position
+        position_norm = [p / 5.0 for p in position]  # Normalize by arena size
+        velocity_norm = [v / MAX_VELOCITY for v in velocity]  # Normalize by max velocity
+        flag_relative = [(self.flag_position[i] - position[i]) / 5.0 for i in range(3)]  # Relative flag position
+        
+        # Get team positions (normalized)
         team_positions = []
         for i in range(TEAM_DRONE_COUNT):
             if i == drone_idx:
@@ -245,7 +251,12 @@ class CTFSupervisor:
             teammate = self.supervisor.getFromDef(f"DRONE_{team.upper()}_{i}")
             if teammate:
                 pos = teammate.getPosition()
-                team_positions.extend(pos if pos else [0, 0, 0])
+                if pos:
+                    # Store relative position, normalized
+                    rel_pos = [(pos[j] - position[j]) / 5.0 for j in range(3)]
+                    team_positions.extend(rel_pos)
+                else:
+                    team_positions.extend([0, 0, 0])
             else:
                 team_positions.extend([0, 0, 0])
         
@@ -253,25 +264,30 @@ class CTFSupervisor:
         while len(team_positions) < TEAM_DRONE_COUNT * 3:
             team_positions.extend([0, 0, 0])
         
-        # Get opponent positions
+        # Get opponent positions (normalized, relative)
         opponent_team = 'defend' if team == 'attack' else 'attack'
         opponent_positions = []
         for i in range(TEAM_DRONE_COUNT):
             opponent = self.supervisor.getFromDef(f"DRONE_{opponent_team.upper()}_{i}")
             if opponent:
                 pos = opponent.getPosition()
-                opponent_positions.extend(pos if pos else [0, 0, 0])
+                if pos:
+                    # Store relative position, normalized
+                    rel_pos = [(pos[j] - position[j]) / 5.0 for j in range(3)]
+                    opponent_positions.extend(rel_pos)
+                else:
+                    opponent_positions.extend([0, 0, 0])
             else:
                 opponent_positions.extend([0, 0, 0])
         
-        # Construct state vector
+        # Construct normalized state vector
         state = np.concatenate([
-            position,
-            velocity,
-            self.flag_position,
-            [flag_dist],
-            team_positions[:TEAM_DRONE_COUNT * 3],
-            opponent_positions[:TEAM_DRONE_COUNT * 3]
+            position_norm,                              # 3 - normalized position
+            velocity_norm,                              # 3 - normalized velocity
+            flag_relative,                              # 3 - relative flag position
+            [flag_dist_norm],                          # 1 - normalized flag distance
+            team_positions[:TEAM_DRONE_COUNT * 3],     # 15 - relative teammate positions
+            opponent_positions[:TEAM_DRONE_COUNT * 3]   # 15 - relative opponent positions
         ])
         
         return state.astype(np.float32)
@@ -345,7 +361,9 @@ class CTFSupervisor:
         # Desired up vector
         desired_up = [0, 1, 0]
 
+        old_velocity = drone.getVelocity()
         velocity = np.maximum(np.minimum(velocity, MAX_VELOCITY), -MAX_VELOCITY)
+        velocity = old_velocity[:3] + (np.array(velocity) - np.array(old_velocity[:3])) * 0.2  # Smooth velocity changes
         torque = np.cross(up_vector, desired_up) * 5.0 
         
         vel_field = drone.getVelocity()
@@ -389,9 +407,9 @@ class CTFSupervisor:
         
         # Constants
         MAX_DIST = 25.0  # Approximate max distance in arena
-        DANGER_ZONE_DIST = 2.0
+        DANGER_ZONE_DIST = 3.0
         INTERCEPTION_ZONE_DIST = 3.0
-        FLAG_CAPTURE_DIST = 1.0
+        FLAG_CAPTURE_DIST = 0.5
         
         # Update episode time
         self.episode_time += self.timestep
@@ -419,29 +437,32 @@ class CTFSupervisor:
         closest_red_drone_id = None
         
         for red_id, red_pos in red_positions.items():
-            # Base timestep penalty
-            red_rewards[red_id] -= 0.2
+            # Reduced timestep penalty
+            red_rewards[red_id] -= 0.005
             
-            # Calculate distance to flag
-            dist_to_flag = np.linalg.norm(red_pos - self.flag_position)
+            # Calculate distance to flag (2D only)
+            dist_to_flag = np.linalg.norm(red_pos[:2] - self.flag_position[:2])
             
             if dist_to_flag < min_distance_to_flag:
                 min_distance_to_flag = dist_to_flag
                 closest_red_drone_id = red_id
             
-            # Dense progress reward (distance-based shaping)
+            # Dense progress reward (distance-based shaping) - INCREASED SCALING
             if red_id in self.prev_red_distances_to_flag:
                 prev_dist = self.prev_red_distances_to_flag[red_id]
                 progress = prev_dist - dist_to_flag
-                red_rewards[red_id] += progress * 2.0
+                red_rewards[red_id] += progress * 50.0  # Increased from 2.0 to 20.0
+            
+            # Bonus for being close to flag
+            red_rewards[red_id] += max(0, 2.0 - dist_to_flag) * 0.5  # Proximity bonus
             
             self.prev_red_distances_to_flag[red_id] = dist_to_flag
             
-            # Danger zone penalty (when near blue drones)
+            # Danger zone penalty (when near blue drones) - 2D only
             for blue_pos in blue_positions.values():
-                dist_to_enemy = np.linalg.norm(red_pos - blue_pos)
+                dist_to_enemy = np.linalg.norm(red_pos[:2] - blue_pos[:2])
                 if dist_to_enemy < DANGER_ZONE_DIST:
-                    red_rewards[red_id] -= 1.0
+                    red_rewards[red_id] -= 2.0
             
             # Check for flag capture
             if dist_to_flag < FLAG_CAPTURE_DIST and not self.flag_captured:
@@ -451,7 +472,7 @@ class CTFSupervisor:
                 # Team bonus for other red drones
                 for other_red_id in red_positions.keys():
                     if other_red_id != red_id:
-                        red_rewards[other_red_id] += 50
+                        red_rewards[other_red_id] += 100
                 
                 # Penalty for all blue drones
                 for blue_id in blue_positions.keys():
@@ -460,13 +481,13 @@ class CTFSupervisor:
                 # Log event
                 with open(self.event_log_file, 'a') as f:
                     f.write(f"{self.episode_count},{self.total_steps},flag_captured,drone_{red_id}_dist_{dist_to_flag:.2f}\n")
-        
+ 
         # === BLUE TEAM REWARDS ===
         
         # Find highest-threat red drone (closest to flag) for each blue drone to target
         red_threats = []  # [(red_id, dist_to_flag, position)]
         for red_id, red_pos in red_positions.items():
-            dist_to_flag = np.linalg.norm(red_pos - self.flag_position)
+            dist_to_flag = np.linalg.norm(red_pos[:2] - self.flag_position[:2])
             red_threats.append((red_id, dist_to_flag, red_pos))
         
         red_threats.sort(key=lambda x: x[1])  # Sort by distance to flag (closest first)
@@ -501,7 +522,7 @@ class CTFSupervisor:
         
         for red_id, red_pos in list(red_positions.items()):
             for blue_id, blue_pos in blue_positions.items():
-                dist = np.linalg.norm(red_pos - blue_pos)
+                dist = np.linalg.norm(red_pos[:2] - blue_pos[:2])
                 
                 if dist < self.collision_threshold:
                     collisions_this_step += 1
@@ -521,7 +542,14 @@ class CTFSupervisor:
                         if drone_node:
                             drone_node.remove()
                             print(f"Physically removed drone DRONE_ATTACK_{red_id} from simulation")
-     
+
+                    if blue_id in self.active_defend_drones:
+                        self.active_defend_drones.remove(blue_id)
+                        defend_node = self.supervisor.getFromDef(f"DRONE_DEFEND_{blue_id}")
+                        if defend_node:
+                            defend_node.remove()
+                            print(f"Physically removed drone DRONE_DEFEND_{blue_id} from simulation")
+
                     # Log event
                     with open(self.event_log_file, 'a') as f:
                         f.write(f"{self.episode_count},{self.total_steps},collision,attack_{red_id}_vs_defend_{blue_id}\n")
@@ -529,7 +557,6 @@ class CTFSupervisor:
                     break  # Only count one collision per red drone
         
         # === TERMINAL REWARDS ===
-        
         # Timeout win for blue team
         if time_expired and not self.flag_captured:
             for blue_id in blue_positions.keys():
@@ -541,17 +568,17 @@ class CTFSupervisor:
         
         # === LOGGING ===
         
-        # Calculate average distance for logging
-        avg_distance = np.mean([np.linalg.norm(pos - self.flag_position) for pos in red_positions.values()]) if red_positions else 0
+        # Calculate average distance for logging (2D only)
+        avg_distance = np.mean([np.linalg.norm(pos[:2] - self.flag_position[:2]) for pos in red_positions.values()]) if red_positions else 0
         
-        # Track progress (for logging)
+        # Track progress (for logging) - 2D only
         progress_made = False
         if self.prev_attack_distances:
             avg_prev = np.mean(self.prev_attack_distances)
             avg_curr = np.mean([np.linalg.norm(pos - self.flag_position) for pos in red_positions.values()]) if red_positions else 0
             progress_made = avg_curr < avg_prev
         
-        self.prev_attack_distances = [np.linalg.norm(pos - self.flag_position) for pos in red_positions.values()]
+        self.prev_attack_distances = [np.linalg.norm(pos[:2] - self.flag_position[:2]) for pos in red_positions.values()]
         
         # Log step metrics to CSV every 50 steps
         if self.total_steps % 50 == 0:
@@ -632,7 +659,7 @@ class CTFSupervisor:
             red_rewards, blue_rewards = self.calculate_rewards()
             
             # Store transitions if in training mode
-            if self.training_mode and self.use_rl:
+            if self.training_mode and self.use_rl and self.attack_agent and self.defend_agent:
                 done = self.flag_captured or (self.episode_time >= self.max_episode_time)
                 
                 # Store transitions for each drone
@@ -667,7 +694,7 @@ class CTFSupervisor:
             episode_defend_reward += sum(blue_rewards)
             
             # Update RL agents periodically
-            if self.training_mode and self.use_rl and self.total_steps % self.update_frequency == 0:
+            if self.training_mode and self.use_rl and self.attack_agent and self.defend_agent and self.total_steps % self.update_frequency == 0:
                 print(f"Updating agents at step {self.total_steps}")
                 attack_losses = self.attack_agent.update()
                 defend_losses = self.defend_agent.update()
@@ -678,7 +705,7 @@ class CTFSupervisor:
                     print(f"  Defend - PL:{defend_losses['policy_loss']:.4f} VL:{defend_losses['value_loss']:.4f} E:{defend_losses['entropy']:.4f}")
             
             # Check for episode end
-            if self.flag_captured or self.episode_time >= self.max_episode_time:
+            if self.flag_captured or self.episode_time >= self.max_episode_time or self.active_attack_drones == set():
                 self.episode_count += 1
                 
                 # Determine winner

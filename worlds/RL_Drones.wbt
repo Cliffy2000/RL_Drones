@@ -48,38 +48,6 @@ RectangleArena {
 }
 TexturedBackgroundLight {
 }
-Solid {
-  translation 0 -2.5 2
-  children [
-    Shape {
-      appearance PBRAppearance {
-      }
-      geometry Box {
-        size 1 1 4
-      }
-    }
-  ]
-  name "obstacle1"
-  boundingObject Box {
-    size 1 1 4
-  }
-}
-Solid {
-  translation 0 2.5 2
-  children [
-    Shape {
-      appearance PBRAppearance {
-      }
-      geometry Box {
-        size 1 1 4
-      }
-    }
-  ]
-  name "obstacle2"
-  boundingObject Box {
-    size 1 1 4
-  }
-}
 DEF FLAG YoubotFlag {
 }
 DEF DRONE_ATTACK_1 Mavic2Pro {
