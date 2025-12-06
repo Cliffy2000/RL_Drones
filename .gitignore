@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 logs/
 checkpoints/
+results/*.png
+results/*.txt
+results/*.json
+results/comparisons/
