@@ -39,18 +39,35 @@ class AgentEvaluator:
         self.results = {}
     
     def _load_latest_csv(self, prefix):
-        """Load the most recent CSV file with given prefix"""
+        """Load the CSV file with the most data"""
         files = list(self.logs_dir.glob(f'{prefix}_*.csv'))
         if not files:
             print(f"Warning: No {prefix} CSV files found in {self.logs_dir}")
             return None
-        latest = max(files, key=lambda p: p.stat().st_mtime)
-        print(f"Loading {latest.name}")
-        return pd.read_csv(latest)
+        
+        # Find file with most data (not just most recent)
+        best_file = None
+        max_lines = 0
+        for f in files:
+            try:
+                with open(f, 'r') as file:
+                    lines = sum(1 for _ in file)
+                    if lines > max_lines:
+                        max_lines = lines
+                        best_file = f
+            except:
+                continue
+        
+        if best_file is None or max_lines <= 1:
+            print(f"Warning: No {prefix} files with data found")
+            return None
+        
+        print(f"Loading {best_file.name} ({max_lines} rows)")
+        return pd.read_csv(best_file)
     
     def calculate_metrics(self):
         """Calculate key performance metrics"""
-        if self.episodes_df is None:
+        if self.episodes_df is None or len(self.episodes_df) == 0:
             print("No episode data available")
             return {}
         
@@ -58,15 +75,16 @@ class AgentEvaluator:
         
         # Overall metrics
         total_episodes = len(df)
-        final_attack_wr = df['attack_win_rate'].iloc[-1]
-        final_defend_wr = df['defend_win_rate'].iloc[-1]
+        final_attack_wr = df['attack_win_rate'].iloc[-1] if len(df) > 0 else 0
+        final_defend_wr = df['defend_win_rate'].iloc[-1] if len(df) > 0 else 0
         
         # Learning progress
-        early_episodes = df[:min(100, len(df)//4)]
-        late_episodes = df[-min(100, len(df)//4):]
+        split_point = max(1, len(df)//4)
+        early_episodes = df[:split_point]
+        late_episodes = df[-split_point:]
         
-        wr_improvement = late_episodes['attack_win_rate'].mean() - early_episodes['attack_win_rate'].mean()
-        reward_improvement = late_episodes['attack_reward'].mean() - early_episodes['attack_reward'].mean()
+        wr_improvement = late_episodes['attack_win_rate'].mean() - early_episodes['attack_win_rate'].mean() if len(df) > 1 else 0
+        reward_improvement = late_episodes['attack_reward'].mean() - early_episodes['attack_reward'].mean() if len(df) > 1 else 0
         
         # Efficiency metrics
         avg_steps = df['steps'].mean()
@@ -270,7 +288,7 @@ class AgentEvaluator:
     
     def plot_performance_summary(self):
         """Plot 6: Dashboard-style summary of key metrics"""
-        if self.episodes_df is None:
+        if self.episodes_df is None or len(self.episodes_df) == 0:
             return
         
         fig = plt.figure(figsize=(14, 10))
@@ -280,8 +298,8 @@ class AgentEvaluator:
         
         # Win distribution pie chart
         ax1 = fig.add_subplot(gs[0, 0])
-        attack_wins = df['attack_wins'].iloc[-1]
-        defend_wins = df['defend_wins'].iloc[-1]
+        attack_wins = df['attack_wins'].iloc[-1] if len(df) > 0 else 0
+        defend_wins = df['defend_wins'].iloc[-1] if len(df) > 0 else 0
         colors = ['#e74c3c', '#3498db']
         ax1.pie([attack_wins, defend_wins], labels=['Attack', 'Defend'], 
                autopct='%1.1f%%', colors=colors, startangle=90)
@@ -494,5 +512,6 @@ if __name__ == "__main__":
     # Run evaluation
     evaluator = AgentEvaluator(logs_dir=logs_dir, output_dir=output_dir)
     evaluator.run_full_evaluation()
+
 
 
