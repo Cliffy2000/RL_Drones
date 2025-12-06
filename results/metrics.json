@@ -1,0 +1,17 @@
+{
+  "total_episodes": 2458,
+  "final_attack_win_rate": 37.31,
+  "final_defend_win_rate": 62.69,
+  "win_rate_improvement": -27.834853420195437,
+  "reward_improvement": -685.7906677524429,
+  "avg_steps_per_episode": 839.866965012205,
+  "avg_duration_seconds": 26.87574288039056,
+  "attack_reward_mean": -379.5394914564686,
+  "attack_reward_std": 1180.7537893498748,
+  "defend_reward_mean": 673.6667127746134,
+  "defend_reward_std": 774.4845510730934,
+  "total_collisions": 113,
+  "total_flag_captures": 7,
+  "total_timeouts": 12318,
+  "collisions_per_episode": 0.04597233523189585
+}

@@ -1,0 +1,47 @@
+
+======================================================================
+RL DRONE CTF AGENTS - EVALUATION REPORT
+======================================================================
+Generated: 2025-12-06 17:22:38
+
+TRAINING OVERVIEW
+----------------------------------------------------------------------
+Total Episodes Trained:        2458
+Average Steps per Episode:     839.9
+Average Episode Duration:      26.9 seconds
+
+FINAL PERFORMANCE
+----------------------------------------------------------------------
+Attack Team Win Rate:          37.3%
+Defend Team Win Rate:          62.7%
+Balance Score (closer to 0):   12.7%
+
+LEARNING PROGRESS
+----------------------------------------------------------------------
+Win Rate Improvement:          -27.8%
+Reward Improvement:            -685.8
+
+REWARD STATISTICS
+----------------------------------------------------------------------
+Attack Team:
+  Mean Reward per Episode:     -379.54
+  Std Deviation:               1180.75
+
+Defend Team:
+  Mean Reward per Episode:     673.67
+  Std Deviation:               774.48
+
+EVENT STATISTICS
+----------------------------------------------------------------------
+Total Flag Captures:           7
+Total Timeouts:                12318
+Total Collisions:              113
+Collisions per Episode:        0.05
+
+======================================================================
+CONCLUSION:
+
+~ Teams show moderate balance (10-20% deviation)
+- Limited learning progress observed
+
+======================================================================
